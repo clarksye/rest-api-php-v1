@@ -252,7 +252,7 @@ if(array_key_exists("taskid", $_GET)) {
                 $numOfPages == 1;
             }
 
-            if($page > $numOfPages) {
+            if($page > $numOfPages || $page == 0) {
                 $response = new Response();
                 $response->setHttpStatusCode(404);
                 $response->setSuccess(false);
@@ -261,6 +261,39 @@ if(array_key_exists("taskid", $_GET)) {
                 exit;
             }
 
+            $offset = ($page == 1 ? 0 : ($limitPerPage*($page-1)));
+
+            $query = $readDB->prepare('SELECT id, title, description, DATE_FORMAT(deadline, "%d/%m/%Y %H:%i") as deadline, completed FROM tbltasks LIMIT :pglimit offset :offset');
+            $query->bindParam(':pglimit', $limitPerPage, PDO::PARAM_INT);
+            $query->bindParam(':offset', $offset, PDO::PARAM_INT);
+            $query->execute();
+
+            $rowCount = $query->rowCount();
+
+            $taskArray = array();
+
+            while($row = $query->fetch(PDO::FETCH_ASSOC)) {
+
+                $task = new Task($row['id'], $row['title'], $row['description'], $row['deadline'], $row['completed']);
+
+                $taskArray[] = $task->returnTaskAsArray();
+            }
+
+            $returnData = array();
+            $returnData['rows_returned'] = $rowCount;
+            $returnData['total_rows'] = $tasksCount;
+            $returnData['total_pages'] = $numOfPages;
+            ($page < $numOfPages ? $returnData['has_next_page'] = true : $returnData['has_next_page'] = false);
+            ($page > 1 ? $returnData['has_previous_page'] = true : $returnData['has_previous_page'] = false);
+            $returnData['tasks'] = $taskArray;
+
+            $response = new Response();
+            $response->setHttpStatusCode(200);
+            $response->setSuccess(true);
+            $response->toCache(true);
+            $response->setData($returnData);
+            $response->send();
+            exit;
         } catch(TaskException $ex) {
             $response = new Response();
             $response->setHttpStatusCode(500);
